@@ -23,6 +23,7 @@ package jsmpl.function;
  * An interface for generating a data type T. This is mostly used for
  * memory efficiency, in case resources are limited.
  * */
+@FunctionalInterface
 public interface Generator<T> {
 	public T generate();
 }

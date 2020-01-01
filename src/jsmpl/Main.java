@@ -1,90 +1,101 @@
 package jsmpl;
 
-import java.io.File;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import jsmpl.direction.PiecewiseMusicalDirection;
 import jsmpl.entity.Entity;
-import jsmpl.function.Generator;
+import jsmpl.entity.greedy.LinearGreedyEntity;
+import jsmpl.entity.greedy.MemoryGreedyEntity;
+import jsmpl.entity.greedy.PeriodicGreedyEntity;
 import jsmpl.function.Waveform;
-import jsmpl.io.WAVFileOutputStream;
-import jsmpl.musicxml.MusicXML;
+import jsmpl.io.pipeline.MusicXMLParserPipeline;
+import jsmpl.io.pipeline.PipelineDeque;
+import jsmpl.io.pipeline.ScorePlayerPipeline;
+import jsmpl.io.pipeline.ScorePlayerPipeline.OutputMode;
 import jsmpl.score.Instrument;
 import jsmpl.score.Layer;
+import jsmpl.score.Note;
 import jsmpl.score.Score;
 
-public class Main {
-	public static void main(String[] args) {
-		String xmlFile = "direction-test.xml";
+public final class Main {
+	public static void entityBenchmark(String[] args) {
+		Entity norm = new Entity(Waveform.SINE, 0.5, 0.5, 0, 0);
+		Entity lingreed = new LinearGreedyEntity(norm, 5);
+		Entity pergreed = new PeriodicGreedyEntity(norm);
+		Entity mhnorm = MemoryGreedyEntity.hashMemory(norm);
+		Entity mhlingreed = MemoryGreedyEntity.hashMemory(lingreed);
+		Entity mhpergreed = MemoryGreedyEntity.hashMemory(pergreed);
+		Entity mtnorm = MemoryGreedyEntity.treeMemory(norm);
+		Entity mtlingreed = MemoryGreedyEntity.treeMemory(lingreed);
+		Entity mtpergreed = MemoryGreedyEntity.treeMemory(pergreed);
 		
-		Entity timbre = new Entity(Waveform.SINE, 0.5, 0.5, 0, 0);  // create an entity to produce sound
-		try {
-			Map<String, Map<String, Object>> scoreAttr = MusicXML.parseXML(new File(xmlFile), null);
-			Score score = new Score();   // initialize score
+		Entity[] test = { norm, lingreed, pergreed, 
+							mhnorm, mhlingreed, mhpergreed, 
+							mtnorm, mtlingreed, mtpergreed };
+		
+		for (int i = 0; i < test.length; i++) {
+			long prevTime = System.currentTimeMillis();
+			xmlTestWithEntity(test[i]);
+			long afterTime = System.currentTimeMillis();
 			
-			for (String partID : scoreAttr.keySet()) {
-				Map<String, Object> attr = scoreAttr.get(partID);
-				String partName = (String) attr.get("partName");  // retrieve score attributes
-				Layer[] partData = (Layer[]) attr.get("partData");
-				PiecewiseMusicalDirection directionData = 
-						(PiecewiseMusicalDirection) attr.get("directionData");
-				
-				if (partData == null) {
-					continue;
-				}
-				
-				Instrument instrument = new Instrument(partName, timbre, partData.length);
-				for (int i = 0; i < partData.length; i++) {
-					instrument.setVoice(partData[i], i);  // set voices to part data from xml
-					System.out.printf("%d | %s\n", i, partData[i].toString());
-				}
-				
-				score.add(instrument, directionData);
-			}
-			
-			Map<Integer, Generator<List<Double[][]>>> sampleGeneratingMap = 
-					score.developInstrumentsAsReference(44100.0, 0);
-			
-			for (int partKey : sampleGeneratingMap.keySet()) {
-				Generator<List<Double[][]>> generator = sampleGeneratingMap.get(partKey);
-				
-				List<Double[][]> samples = generator.generate();
-				Double[][] sampleData = samples.get(0);
-				
-				double maxSampleValue = 0.0;
-				for (int i = 1; i < samples.size(); i++) {
-					Double[][] other = samples.get(i);
-					
-					for (int ii = 0; ii < sampleData.length && ii < other.length; ii++) {
-						for (int jj = 0; jj < sampleData[ii].length && jj < other[ii].length; jj++) {
-							sampleData[ii][jj] += other[ii][jj];
-							
-							if (sampleData[ii][jj] > maxSampleValue) {
-								maxSampleValue = sampleData[ii][jj];  // we want to keep track of this for normalization.
-							}
-						}
-					} 
-				}
-				
-				if (maxSampleValue > 0.0) {
-					for (int i = 0; i < sampleData.length; i++) {
-						for (int j = 0; j < sampleData[i].length; j++) {
-							sampleData[i][j] /= maxSampleValue;  // normalize here
-						}
-					}
-				}
-				
-				System.out.println("Writing to file for part " + partKey + ".");
-				WAVFileOutputStream ostream = new WAVFileOutputStream("test_" + partKey + ".wav", 2);
-				ostream.write(sampleData);
-				ostream.close();
-			}
-
-			System.out.println("Done.");
-		} catch (Exception e) {
-			e.printStackTrace();
+			System.out.printf("Entity %d took %d ms to complete.\n", i, afterTime - prevTime);
 		}
+	}
+	
+	public static void xmlTest(String[] args) {
+		Entity timbre = 
+				new PeriodicGreedyEntity(
+						new Entity(Waveform.SINE, 0.5, 0.5, 0, 0));  // create an entity to produce sound
+		xmlTestWithEntity(timbre); 
+	}
+	
+	public static void soundTest(String[] args) {
+		String freq = "A4";
+		Entity timbre = 
+				new Entity(Waveform.SINE, 0.5, 0.5, 0, 0);  // create an entity to produce sound
+		
+		Layer layer = new Layer();
+		layer.add(new Note(freq, 4.0, 0.5));
+		
+		Instrument instrument = new Instrument("test", timbre);
+		instrument.setVoice(layer, 0);
+		
+		Score score = new Score();
+		score.add(instrument);
+		
+		ScorePlayerPipeline spp = new ScorePlayerPipeline();
+		spp.transferDataBetween(score, freq, null);
+	}
+
+	@SuppressWarnings({ "unchecked", "rawtypes" })
+	private static void xmlTestWithEntity(Entity timbre) {
+		String xmlFile;
+		
+		// xmlFile = "direction-test.xml";
+		xmlFile = "suhas_vittal-mixed_messages.xml";
+		// xmlFile = "beethoven-grobe_fuge.xml";
+		
+		Map<String, Object> kwargs = new HashMap<String, Object>();
+		
+		List entities = new ArrayList();
+		entities.add(timbre);
+		kwargs.put("entities", entities);
+		
+		MusicXMLParserPipeline mxpp = new MusicXMLParserPipeline();
+		ScorePlayerPipeline spp = new ScorePlayerPipeline(OutputMode.LOW_MEMORY);
+		
+		PipelineDeque deque = new PipelineDeque();
+		deque.addToBack(mxpp);
+		deque.addToBack(spp);
+		
+		Score score = new Score();
+		deque.passData(new Object[] { xmlFile, score, "test" }, kwargs); 
+	}
+	
+	public static void main(String[] args) {
+		xmlTest(args);
+		// entityBenchmark(args);
 	}
 }

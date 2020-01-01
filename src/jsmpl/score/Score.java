@@ -19,6 +19,8 @@
 
 package jsmpl.score;
 
+import java.io.Serializable;
+import java.util.Iterator;
 import java.util.List;
 import java.util.TreeMap;
 
@@ -34,7 +36,11 @@ import jsmpl.function.Generator;
  * one can complete the second violin part before the first violin
  * part without much hassle.
  */
-public class Score {
+public class Score implements Serializable {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 766769256516233941L;
 	private TreeMap<Integer, Instrument> instruments;
 	private TreeMap<Integer, PiecewiseMusicalDirection> directions;
 	
@@ -100,17 +106,33 @@ public class Score {
 	 * @param samplingRate the sampling rate
 	 * @param verbose 1 to include console statements
 	 * @return a dictionary containing the developed samples for each instrument.
+	 * @throws InterruptedException 
 	 */
-	public TreeMap<Integer, List<Double[][]>> developAllInstruments(double samplingRate, int verbose) {
+	public TreeMap<Integer, List<Double[][]>> developInstruments(
+			double samplingRate, int verbose, boolean useMultiThreading) throws InterruptedException 
+	{
 		TreeMap<Integer, List<Double[][]>> scoreDataMap = new TreeMap<Integer, List<Double[][]>>();
 		
 		Integer key = instruments.firstKey();
 		while (key != null) {
 			Instrument ins = instruments.get(key);
 			PiecewiseMusicalDirection dir = directions.get(key);
-			scoreDataMap.put(key, ins.developParts(dir, samplingRate, verbose));
 			
-			key = instruments.lowerKey(key);
+			List<Double[][]> parts;
+			
+			if (verbose == 1) {
+				System.out.println("Part " + key);
+			}
+			
+			if (useMultiThreading) {
+				parts = ins.developPartsWithThreads(dir, samplingRate);
+			} else {
+				parts = ins.developParts(dir, samplingRate, verbose);
+			}
+			
+			scoreDataMap.put(key, parts);
+			
+			key = instruments.higherKey(key);
 		}
 		
 		return scoreDataMap;
@@ -121,6 +143,9 @@ public class Score {
 	 * developing all instruments and storing the samples in a TreeMap, this function
 	 * stores a generator object such that when the object's generate method is called,
 	 * the user will obtain the samples.
+	 * 
+	 * However, note that it is NOT memory-friendly if you develop all instruments anyways.
+	 * It is only memory-friendly when you want to use one instrument at a time.
 	 * 
 	 * @param samplingRate the sampling rate
 	 * @param verbose 1 to include console statements
@@ -149,10 +174,32 @@ public class Score {
 				
 			});
 			
-			key = instruments.lowerKey(key);
+			key = instruments.higherKey(key);
 		}
 		
 		return scoreDataRef;
+	}
+	
+	public TreeMap<Integer, Iterator<List<Double[]>>> developInstrumentsAsIterator(
+			double samplingRate)
+	{
+		TreeMap<Integer, Iterator<List<Double[]>>> scoreDataIter = 
+				new TreeMap<Integer, Iterator<List<Double[]>>>();
+		
+		if (instruments.size() == 0) {
+			return scoreDataIter;
+		}
+		
+		Integer key = instruments.firstKey();
+		while (key != null) {
+			Instrument ins = instruments.get(key);
+			PiecewiseMusicalDirection dir = directions.get(key);
+			scoreDataIter.put(key, ins.developPartsAsIterator(dir, samplingRate));
+			
+			key = instruments.higherKey(key);
+		}
+		
+		return scoreDataIter;
 	}
 	
 	/**

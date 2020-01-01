@@ -23,6 +23,7 @@ package jsmpl.function;
  * An interface for functions that represent the shape of a 
  * musical direction's transformation
  * */
+@FunctionalInterface
 public interface DirectionShapeFunction {
 	public static final DirectionShapeFunction linear = 
 			new DirectionShapeFunction() 

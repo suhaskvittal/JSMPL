@@ -55,6 +55,13 @@ public class PiecewiseMusicalDirection extends MusicalDirection {
 	/**
 	 * @param directions A list of MusicalDirections to concatenate together.
 	 */
+	public PiecewiseMusicalDirection(PiecewiseMusicalDirection other) {
+		super(other.getInitialDynamics(), other.getFinalDynamics(), other.getLength());
+		hashTree = other.hashTree;
+		head = other.head;
+		
+	}
+	
 	public PiecewiseMusicalDirection(MusicalDirection... directions) {
 		this(Arrays.asList(directions));
 	}

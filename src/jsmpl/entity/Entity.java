@@ -19,6 +19,8 @@
 
 package jsmpl.entity;
 
+import java.io.Serializable;
+
 import jsmpl.function.ADSRFunction;
 import jsmpl.function.Waveform;
 
@@ -26,7 +28,11 @@ import jsmpl.function.Waveform;
 /**
  * The Entity class models a sound generator, with an ADSR envelope.
  * */
-public class Entity {
+public class Entity implements Serializable {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 4803443500097439886L;
 	private Waveform waveForm;
 	private ADSRFunction adsr;
 	private double attack, decay, sustain, release;
@@ -42,6 +48,11 @@ public class Entity {
 	 */
 	public Entity(Waveform wf, double attack, double decay, double sustain, double release) {
 		this(wf, attack, decay, sustain, release, new ADSRFunction() {
+
+			/**
+			 * 
+			 */
+			private static final long serialVersionUID = -3288448922766037675L;
 
 			@Override
 			public double f(double tProp, double attack, double decay, 
@@ -94,6 +105,30 @@ public class Entity {
 		this.adsr = adsr;
 	}
 	
+	public Waveform getWaveform() {
+		return waveForm;
+	}
+	
+	public double getAttack() {
+		return attack;
+	}
+	
+	public double getDecay() {
+		return decay;
+	}
+	
+	public double getSustain() {
+		return sustain;
+	}
+	
+	public double getRelease() {
+		return release;
+	}
+	
+	public ADSRFunction getADSR() {
+		return adsr;
+	}
+	
 	/**
 	 * @param frequency the pitch frequency
 	 * @param time the time for which the frequency is played for
@@ -102,20 +137,19 @@ public class Entity {
 	 * 	standard sampling rate is 44100 Hz
 	 * @return an array of doubles which are the samples for the sound
 	 */
-	public double[] playPitch(double frequency, double time, double amplitude, 
-			double samplingRate) {
+	public double[] playPitch(double frequency, double time, double amplitude, double samplingRate) {
 		int numberOfSamples = (int) (time * samplingRate);
 		double[] waveData = new double[numberOfSamples];
 		
 		for (int i = 0; i < numberOfSamples; i++) {
 			waveData[i] = amplitude * waveFunction(frequency, 
-					((double) i) / numberOfSamples * time, time);
+					(i * time) / numberOfSamples, time);
 		}
 		
 		return waveData;
 	}
 	
-	private double waveFunction(double frequency, double currentTime, double totalTime) {
+	protected double waveFunction(double frequency, double currentTime, double totalTime) {
 		return waveForm.f(2.0 * Math.PI * frequency * currentTime) *
 				adsr.f(currentTime / totalTime, attack, decay, sustain, release);
 	}

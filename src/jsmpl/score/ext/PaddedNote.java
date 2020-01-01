@@ -31,6 +31,10 @@ import jsmpl.util.Dynamics;
  * no real practical use in composition.
  */
 public class PaddedNote extends Note {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 7330153191729583267L;
 	private Note body;
 	private double headPadding, tailPadding;
 	

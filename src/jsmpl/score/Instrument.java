@@ -19,8 +19,8 @@
 
 package jsmpl.score;
 
+import java.io.Serializable;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -39,7 +39,9 @@ import jsmpl.entity.Entity;
  * 	4. The left and right pans of the instrument, which is its orientation with respect to
  * 		an observer.
  */
-public class Instrument {
+public class Instrument implements Serializable {
+	private static final long serialVersionUID = -7411978608113898791L;
+	
 	public static final double PAN_RIGHT_SS = Math.PI / 2.0;
 	public static final double PAN_LEFT_SS = 0.0;
 	
@@ -132,6 +134,105 @@ public class Instrument {
 	public List<Double[][]> developParts(double samplingRate, int verbose) {
 		return developParts(null, samplingRate, verbose);
 	}
+
+	@SuppressWarnings("unchecked")
+	public Iterator<List<Double[]>> developPartsAsIterator(
+			PiecewiseMusicalDirection directionOverlay, double samplingRate) 
+	{
+		double leftPanGain = computeLeftPanGain();
+		double rightPanGain = computeRightPanGain();
+	
+		Iterator<Chord>[] chordIterator = (Iterator<Chord>[]) new Iterator[voices.length];
+		for (int i = 0; i < voices.length; i++) {
+			chordIterator[i] = voices[i].getChordStream().iterator();
+		}
+		
+		int[] pointers = new int[voices.length];  // used to keep track of location
+		double[][] currArrays = new double[voices.length][];  // contains current data to process
+		Chord[] currChords = new Chord[voices.length];  // contains current chords that are being processed.
+		
+		// these three variables keep track of musical direction
+		MusicalDirection[] currDirections = new MusicalDirection[voices.length];
+		int[] currKeys = new int[voices.length];
+		double[] currLocs = new double[voices.length];
+		
+		Iterator<List<Double[]>> iter = new Iterator<List<Double[]>>() {			
+			@Override
+			public boolean hasNext() {
+				for (int i = 0; i < currArrays.length; i++) {
+					if (currArrays[i] == null || pointers[i] >= currArrays[i].length) {
+						// then get the next chord.
+						if (!chordIterator[i].hasNext()) {
+							return false;
+						}
+					}
+				}
+				
+				return true;
+			}
+
+			@Override
+			public List<Double[]> next() {
+				List<Double[]> data = new ArrayList<Double[]>(voices.length);
+				
+				for (int i = 0; i < currArrays.length; i++) {
+					while (currArrays[i] == null || pointers[i] >= currArrays[i].length) {
+						// keep getting chords until we reach a valid one.
+						// there are cases when an array has a length of 0, so we
+						// account for that with this while loop.
+						if (!chordIterator[i].hasNext()) {
+							return null;
+						} else {
+							pullNextChord(i);
+						}
+					}
+					
+					double adjust;
+					if (directionOverlay == null || currChords[i].isRest()) {
+						adjust = 1;
+					} else {
+						double t = pointers[i] / samplingRate;
+						
+						if ((currDirections[i] == null || t > currLocs[i] + currDirections[i].getLength())
+								&& currKeys[i] < directionOverlay.getHashSize()) 
+						{
+							PiecewiseMusicalDirection.DirectionTuple tmpTuple = 
+									directionOverlay.getBucket(t);
+							
+							currDirections[i] = tmpTuple.direction;
+							currKeys[i] = tmpTuple.index;
+							currLocs[i] = tmpTuple.length;
+						}
+						
+						adjust = currDirections[i].value(t - currLocs[i]) / currChords[i].getVolume();
+					}
+					
+					double x = currArrays[i][pointers[i]++] * adjust;  // current data point
+					data.add(new Double[] {x * leftPanGain, x * rightPanGain});
+				}
+				
+				return data;
+			}
+			
+			private void pullNextChord(int voiceIndex) {
+				Chord chord = chordIterator[voiceIndex].next();
+				
+				double[] samples;
+				if (chord.isRest()) {
+					samples = new double[(int) (chord.getLength() * samplingRate)];
+				} else {
+					samples = chord.produceData(entity, samplingRate);
+				}
+				
+				currChords[voiceIndex] = chord;
+				currArrays[voiceIndex] = samples;
+				pointers[voiceIndex] = 0;  // now reset pointer as we are on the next chord.
+			}
+		};
+		
+		
+		return iter;
+	}
 	
 	
 	/**
@@ -160,9 +261,8 @@ public class Instrument {
 		// also hard to decipher.
 		List<Double[][]> parts = new ArrayList<Double[][]>(voices.length);
 		
-		final double HPI = Math.PI / 2;
-		double leftPanGain = Math.sqrt((HPI - panLeft) * (1.0 / HPI) * Math.cos(panLeft));
-		double rightPanGain = Math.sqrt(panRight * (1.0 / HPI) * Math.sin(panRight));
+		double leftPanGain = computeLeftPanGain();
+		double rightPanGain = computeRightPanGain();
 		
 		ExecutorService es = Executors.newCachedThreadPool();
 		long longestPartLength = 0;
@@ -219,9 +319,8 @@ public class Instrument {
 	{
 		List<Double[][]> parts = new ArrayList<Double[][]>(voices.length);
 		
-		final double HPI = Math.PI / 2;
-		double leftPanGain = Math.sqrt((HPI - panLeft) * (1.0 / HPI) * Math.cos(panLeft));
-		double rightPanGain = Math.sqrt(panRight * (1.0 / HPI) * Math.sin(panRight));
+		double leftPanGain = computeLeftPanGain();
+		double rightPanGain = computeRightPanGain();
 	
 		for (int i = 0; i < voices.length; i++) {
 			Layer phrase = voices[i];
@@ -231,7 +330,7 @@ public class Instrument {
 			}
 			
 			if (verbose == 1) {
-				System.out.printf("\tVoice number: %d", i);
+				System.out.printf("\tVoice number: %d, Length: %f\n", i, phrase.getSize());
 			}
 			
 			double[] part = new double[(int) (phrase.getSize() * samplingRate)];
@@ -264,7 +363,7 @@ public class Instrument {
 			
 			if (verbose == 1) {
 				if (chordNumber % 50 == 0) {
-					System.out.printf("\t\tInstance number: %d, chord: %s", chordNumber++, chord);
+					System.out.printf("\t\tInstance number: %d, chord: %s\n", chordNumber++, chord);
 				}
 			}
 			
@@ -299,5 +398,15 @@ public class Instrument {
 				array[pointer++] = samples[j] * adjust;
 			}
 		}
+	}
+	
+	private double computeLeftPanGain() {
+		final double HPI = Math.PI / 2;
+		return Math.sqrt((HPI - panLeft) * (1.0 / HPI) * Math.cos(panLeft));
+	}
+	
+	private double computeRightPanGain() {
+		final double HPI = Math.PI / 2;
+		return Math.sqrt(panRight * (1.0 / HPI) * Math.sin(panRight));
 	}
 }

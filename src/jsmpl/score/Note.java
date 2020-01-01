@@ -19,6 +19,7 @@
 
 package jsmpl.score;
 
+import java.io.Serializable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -33,7 +34,8 @@ import jsmpl.util.Dynamics;
  * 	2.) a Length
  * 	3.) a Volume
  * */
-public class Note {
+public class Note implements Serializable {
+	private static final long serialVersionUID = 4591781571975456246L;
 	private double frequency;
 	private double length;
 	private double volume;

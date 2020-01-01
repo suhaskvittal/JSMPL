@@ -4,11 +4,18 @@ import jsmpl.entity.Entity;
 import jsmpl.score.Note;
 
 /**
- * A note that is a wrapper for two notes played without release. For example, passages with legato can be
- * represented as one SequentialNote object, as one would simply nest SequentialNote objects to create a long
- * legato passage. Similarly, chained ties can be represented with one nested SequentialNote object.
+ * A note that is a wrapper for two notes played without 
+ * release. For example, passages with legato can be
+ * represented as one SequentialNote object, as one would 
+ * simply nest SequentialNote objects to create a long
+ * legato passage. Similarly, chained ties can be 
+ * represented with nested SequentialNote objects.
  */
 public class SequentialNote extends Note {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = -3545896681470948428L;
 	private Note first, second;
 	
 	public SequentialNote() {

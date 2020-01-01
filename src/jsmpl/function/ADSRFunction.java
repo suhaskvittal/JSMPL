@@ -19,9 +19,11 @@
 
 package jsmpl.function;
 
+import java.io.Serializable;
+
 /**
  * An interface for functions that represent an ADSR envelope.
  * */
-public interface ADSRFunction {
+public interface ADSRFunction extends Serializable {
 	public double f(double tProp, double attack, double decay, double sustain, double release);
 }

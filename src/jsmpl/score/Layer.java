@@ -134,7 +134,7 @@ public class Layer {
 		}
 		
 		for (int i = 0; i < chords.size(); i++) {
-			if (!chords.isEmpty()) {
+			if (!chords.get(i).isRest()) {
 				return false;
 			}
 		}

@@ -25,6 +25,7 @@ import jsmpl.entity.Entity;
  * A class used to represent chords in music.
  */
 public class Chord extends Note {
+	private static final long serialVersionUID = 5740081589302226163L;
 	private Note[] notes;
 	
 	/**

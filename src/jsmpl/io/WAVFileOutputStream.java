@@ -1,20 +1,43 @@
+/**
+ * Copyright (C) 2019 Suhas Vittal
+ *
+ *  This file is part of Stoch-MPL.
+ *
+ *  Stoch-MPL is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Stoch-MPL is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *  
+ *  You should have received a copy of the GNU General Public License
+ *  along with Stoch-MPL.  If not, see <https://www.gnu.org/licenses/>.
+ * */
+
 package jsmpl.io;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
-import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFileFormat.Type;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.UnsupportedAudioFileException;
 
+/**
+ * This file implements an outputstream for .WAV files.
+ */
 public class WAVFileOutputStream extends FileOutputStream {
 	private File file;
 	private AudioFormat format;
+	private int bitSize;
 	
 	/**
 	 * @param file the file to write to
@@ -27,14 +50,31 @@ public class WAVFileOutputStream extends FileOutputStream {
 	
 	/**
 	 * @param file the file to write to 
-	 * @param append whether or not to append to the file
+	 * @param channels the number of channels in the wav file
+	 * @throws FileNotFoundException 
 	 * @throws UnsupportedAudioFileException
 	 * @throws IOException
 	 */
-	public WAVFileOutputStream(File file, int channels) throws IOException {
+	public WAVFileOutputStream(File file, int channels) throws FileNotFoundException {
+		this(file, channels, 32);
+	}
+	
+	/**
+	 * @param file the file to write to
+	 * @param channels the number of channels in the wav file
+	 * @param bitSize the bit size of the wav file. Note that for WAV files,
+	 * 		8 bit (byte quality) to 32 bit (integer quality) are considered standard.
+	 * @throws FileNotFoundException
+	 */
+	public WAVFileOutputStream(File file, int channels, int bitSize) throws FileNotFoundException {
+		this(file, channels, bitSize, 44100.0F);
+	}
+	
+	public WAVFileOutputStream(File file, int channels, int bitSize, double samplingRate) throws FileNotFoundException {
 		super(file);
 		this.file = file;
-		this.format = new AudioFormat(44100.0F, 8, channels, true, true);;
+		this.format = new AudioFormat((float) samplingRate, bitSize, channels, true, false);
+		this.bitSize = bitSize;
 	}
 	
 	/**
@@ -48,7 +88,7 @@ public class WAVFileOutputStream extends FileOutputStream {
 	
 	/**
 	 * @param name the path of the file to write to
-	 * @param append whether or not to append to the file
+	 * @param channels the number of channels in the wav file
 	 * @throws UnsupportedAudioFileException
 	 * @throws IOException
 	 */
@@ -56,8 +96,16 @@ public class WAVFileOutputStream extends FileOutputStream {
 		this(new File(name), channels);
 	}
 	
+	public WAVFileOutputStream(String name, int channels, int bitSize) throws FileNotFoundException {
+		this(new File(name), channels, bitSize);
+	}
+	
+	public WAVFileOutputStream(String name, int channels, int bitSize, double samplingRate) throws FileNotFoundException {
+		this(new File(name), channels, bitSize, samplingRate);
+	}
+	
 	public void write(int b) throws IOException {
-		write(new byte[] {(byte) b, (byte) b});
+		write(new Integer[] { b });
 	}
 	
 	public void write(byte[] b) throws IOException {
@@ -92,7 +140,7 @@ public class WAVFileOutputStream extends FileOutputStream {
 	}
 	
 	public <T extends Number> void write(T[] b, int off, int len) throws IOException {
-		write(convertToByteArray(b), off, len);
+		write(convertToByteArray(b), off * bitSize / 8, len * bitSize / 8);
 	}
 	
 	public void write(byte[][] b) throws IOException {
@@ -119,11 +167,31 @@ public class WAVFileOutputStream extends FileOutputStream {
 		write(flatten(b));
 	}
 	
+	public <T extends Number> void write(T[][] b, int off, int len) throws IOException {
+		write(flatten(b), off * b[0].length, len * b[0].length);  // note these are adjusted for flattened parameters
+	}
+	
 	private <T extends Number> byte[] convertToByteArray(T[] arr) {
-		byte[] b = new byte[arr.length];
+		int endianCount = bitSize / 8;  // bitSize / 8 values required to convert to little endian.
+		byte[] b = new byte[arr.length * endianCount];
+		
+		long smin = -(1 << (bitSize - 1));
+		long smax = (1 << (bitSize - 1)) - 1;
 		
 		for (int i = 0; i < arr.length; i++) {
-			b[i] = (byte) (128 * arr[i].doubleValue());
+			long sample = (long) (smax * (arr[i] == null ? 0.0 : arr[i].doubleValue()));
+			
+			if (sample > smax) {
+				sample = smax;
+			} 
+			
+			if (sample < smin) {
+				sample = smin;
+			}
+			
+			for (int j = 0; j < endianCount; j++) {
+				b[endianCount * i + j] = (byte) ((sample >> (8 * j)) & 255);
+			}
 		}
 		
 		return b;

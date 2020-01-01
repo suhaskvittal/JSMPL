@@ -19,61 +19,17 @@
 
 package jsmpl.function;
 
+import java.io.Serializable;
+
 /**
  * An interface for representing waveform functions, such as
  * sine waves or sawtooth waves.
  * */
-public interface Waveform {
-	public static final Waveform SINE = new Waveform() {
-		@Override
-		public double f(double t) {
-			return Math.sin(t);
-		}
-	};
-	
-	public static final Waveform TRIANGLE = new Waveform() {
-		@Override
-		public double f(double t) {
-			double modt = (t + Math.PI / 2) % (2 * Math.PI);  // shift by pi/2 for easy computations
-			if (modt < 0) {
-				modt += 2 * Math.PI;
-			}
-			
-			if (modt <= Math.PI) {
-				return (2 / Math.PI) * modt - 1;
-			} else {
-				return (-2 / Math.PI) * (modt - Math.PI) + 1;
-			}
-		}
-	};
-	
-	public static final Waveform SQUARE = new Waveform() {
-		@Override
-		public double f(double t) {
-			double modt = t % (2 * Math.PI);
-			if (modt < 0) {
-				modt += 2 * Math.PI;
-			} 
-			
-			if (t <= Math.PI) {
-				return 1;
-			} else {
-				return -1;
-			}
-		}
-	};
-	
-	public static final Waveform SAWTOOTH = new Waveform() {
-		@Override
-		public double f(double t) {
-			double modt = (t + Math.PI) % (2 * Math.PI);  // shift by pi by for easy computation
-			if (modt < 0) {
-				modt += 2 * Math.PI;
-			}
-			
-			return (1 / Math.PI) * modt - 1;
-		}
-	};
+public interface Waveform extends Serializable {
+	public static final Waveform SINE = PeriodicWaveform.SINE;
+	public static final Waveform TRIANGLE = PeriodicWaveform.TRIANGLE;
+	public static final Waveform SQUARE = PeriodicWaveform.SQUARE;
+	public static final Waveform SAWTOOTH = PeriodicWaveform.SAWTOOTH;
 	
 	public double f(double t);
 }

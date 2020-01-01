@@ -1,15 +1,30 @@
+/**
+ * Copyright (C) 2019 Suhas Vittal
+ *
+ *  This file is part of Stoch-MPL.
+ *
+ *  Stoch-MPL is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  Stoch-MPL is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *  
+ *  You should have received a copy of the GNU General Public License
+ *  along with Stoch-MPL.  If not, see <https://www.gnu.org/licenses/>.
+ * */
+
 package jsmpl.musicxml;
 
 import java.io.File;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -29,7 +44,13 @@ import jsmpl.score.ext.PaddedNote;
 import jsmpl.score.ext.SequentialNote;
 import jsmpl.util.Dynamics;
 
-public class MusicXML {
+/**
+ * This class contains static methods to aid with the
+ * parsing of XML data.
+ */
+public final class MusicXML {
+	// TODO comment the private methods as well.
+	
 	private static Map<String, Object> PARSE_XML_DEFAULT_KWARGS = new HashMap<String, Object>();
 	private static final int LAYERS_PER_STAFF = 6;
 	static {
@@ -38,6 +59,20 @@ public class MusicXML {
 		PARSE_XML_DEFAULT_KWARGS.put("verbose", 0);
 	}
 	
+	/**
+	 * @param file the file to parse
+	 * @param kwargs kwargs to use while parsing
+	 * 		Possible kwargs:
+	 * 			verbose (Type Integer) - set to 1 to see console output
+	 * 			musicalDirectionShape (Type DirectionShapeFunction) - the shape of parsed musical directions
+	 * @return a map with the following structure:
+	 * 		"partKey": {
+	 * 			"partData" (Type Layer[])
+	 * 			"partName" (Type String)
+	 * 			"directionData" (Type PiecewiseMusicalDirection)
+	 * 		}
+	 * @throws Exception
+	 */
 	public static Map<String, Map<String, Object>> parseXML(File file, 
 			Map<String, Object> kwargs) throws Exception 
 	{
@@ -64,7 +99,6 @@ public class MusicXML {
 		}
 		
 		NodeList childNodes = root.getChildNodes();
-		ExecutorService es = Executors.newCachedThreadPool();
 		
 		for (int i = 0; i < childNodes.getLength(); i++) {
 			Node childNode = childNodes.item(i);
@@ -92,30 +126,15 @@ public class MusicXML {
 				} else if (child.getTagName().contentEquals("part")) {
 					String id = child.getAttribute("id");
 					
-					Thread thread = new MusicXMLParsingThread(scoreAttr.get(id), globalAttr,
+					MusicXMLParsingProcess proc = new MusicXMLParsingProcess(scoreAttr.get(id), globalAttr,
 							kwargs, firstPart, child);
-					if (firstPart) {
-						thread.start();
-						thread.join();
-					} else {
-						es.execute(thread);
-					}
-					
+					proc.run();  // TODO make this multithreaded; not a high priority since the algorithm is quick.
 					firstPart = false;
 				}
 			}
 		}
 		
-		System.out.println("Outside thread creator.");
-		es.shutdown();
-		boolean terminated = es.awaitTermination(1, TimeUnit.MINUTES);
-		System.out.println("terminated: " + terminated);
-		if (!terminated) {
-			throw new RuntimeException("The parser timed out after 1 minute.");
-		} else {
-			System.out.println(scoreAttr);
-			return scoreAttr;
-		}
+		return scoreAttr;
 	} 
 	
 	private static String computeCanonicalRepresentation(char pitchLetter, int pitchAdjust, 
@@ -208,13 +227,9 @@ public class MusicXML {
 		
 		Map<Integer, List<Note>> tieSuppStack = (Map<Integer, List<Note>>) description.get("tieSuppStack");
 		if (tieSuppStack.containsKey(index) && !tieSuppStack.get(index).isEmpty()) {
-			double tailPadLength = chordBuffers[index].get(0).getLength();
-			
 			while (!tieSuppStack.get(index).isEmpty()) {
 				Note e = tieSuppStack.get(index).remove(tieSuppStack.get(index).size() - 1);
-				Note ne = new PaddedNote(e.getFrequency(), e.getLength(), e.getVolume(), 0.0, tailPadLength);
-				
-				chordBuffers[index].add(ne);
+				chordBuffers[index].add(e);
 			}
 		}
 		
@@ -258,6 +273,7 @@ public class MusicXML {
 		MusicXMLNoteWrapper noteWrapper = new MusicXMLNoteWrapper();
 		
 		NodeList noteChildList = noteXML.getChildNodes();
+		
 		for (int i = 0; i < noteChildList.getLength(); i++) {
 			Node noteChildNode = noteChildList.item(i);
 			
@@ -333,7 +349,7 @@ public class MusicXML {
 		int layerCount = (Integer) description.get("layerCount");
 		Layer[] measureLayers = new Layer[layerCount];
 		ArrayList<Note>[] chordBuffers = (ArrayList<Note>[]) new ArrayList[layerCount];
-		int[] layerLocalPosition = new int[layerCount];
+		double[] layerLocalPosition = new double[layerCount];
 		int[] insideTieStart = new int[layerCount];
 		int[] insideTieStop = new int[layerCount];
 		
@@ -380,7 +396,7 @@ public class MusicXML {
 					layerCount = LAYERS_PER_STAFF * ((Integer) description.get("staves"));
 					measureLayers = new Layer[layerCount];
 					chordBuffers = (ArrayList<Note>[]) new ArrayList[layerCount];
-					layerLocalPosition = new int[layerCount];
+					layerLocalPosition = new double[layerCount];
 					insideTieStart = new int[layerCount];
 					insideTieStop = new int[layerCount];
 					
@@ -421,17 +437,16 @@ public class MusicXML {
 								.put(layerBucketIndex, 0.0);
 						}
 						
-						if ((Double) description.get("position") == 0 || 
+						if ((Double) description.get("position") == 0|| 
 								(Double) description.get("position") < layerGlobalPosition)
 						{
-							System.out.println("yeet");
 							description.put("position", layerGlobalPosition);
 							
 							// add to direction queue
 							int dirSlope = (Integer) description.get("direction");
-							Object dqv = dirSlope == 1 ? "c" : (dirSlope == -1 ? "d" : description.get("dynamics"));
+							Object dqe = dirSlope == 1 ? "c" : (dirSlope == -1 ? "d" : description.get("dynamics"));
 							((LinkedList<DirectionQueueElement>) description.get("directionQueue"))
-								.addLast(new DirectionQueueElement(dqv, (Double) description.get("position")));	
+								.addLast(new DirectionQueueElement(dqe, layerGlobalPosition));	
 						}
 						
 						layerLocalPosition[layerBucketIndex] += noteWrapper.note.getLength();
@@ -442,12 +457,19 @@ public class MusicXML {
 					}
 					
 					if (noteWrapper.grace == 1) {  // add space in each voice to accomodate for the grace note
-						for (int j = 0; j < measureLayers.length; j++) {
+						/*for (int j = 0; j < measureLayers.length; j++) {
 							if (j != layerBucketIndex) {
+								if (measureLayers[j] == null) {
+									measureLayers[j] = new Layer();
+								}
+								
 								measureLayers[j].add(new Note(0.0, noteWrapper.note.getLength()));
 								layerLocalPosition[j] += noteWrapper.note.getLength();
 							}
-						}
+						}*/
+						
+						// or maybe just ignore it for now too hard 
+						continue;
 					}
 					
 					if (noteWrapper.tieStop == 1) {
@@ -562,7 +584,7 @@ public class MusicXML {
 				int dirSlope = (Integer) description.get("direction");
 				Object dqv = dirSlope == 1 ? "c" : (dirSlope == -1 ? "d" : description.get("dynamics"));
 				((LinkedList<DirectionQueueElement>) description.get("directionQueue"))
-					.add(new DirectionQueueElement(dqv, (Double) description.get("position")));
+					.add(new DirectionQueueElement(dqv, (Double) layerGlobalPosition));
 			}
 			
 			Map<Integer, Double> tieSize = (Map<Integer, Double>) description.get("tieSize");
@@ -589,6 +611,20 @@ public class MusicXML {
 		return measureLayers;
 	}
 	
+	static class DirectionQueueElement {
+		Object dynamics;
+		double position;
+		
+		public DirectionQueueElement(Object d, double x) {
+			dynamics = d;
+			position = x;
+		}
+		
+		public String toString() {
+			return "(" + dynamics.toString() + "," + position + ")";
+		}
+	}
+	
 	private static class MusicXMLNoteWrapper {
 		private Note note;
 		private int voiceNumber;
@@ -611,5 +647,4 @@ public class MusicXML {
 			this.tieStop = tsp;
 		}
 	}
-	
 }
